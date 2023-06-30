@@ -1,24 +1,26 @@
-# Copyright 2021 DAI FOUNDATION (the original version https://github.com/daifoundation/ethtx_ce)
-# Copyright 2021-2022 Token Flow Insights SA (modifications to the original software as recorded
-# in the changelog https://github.com/EthTx/ethtx/blob/master/CHANGELOG.md)
+#  Copyright 2021 DAI Foundation
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-#
-# The product contains trademarks and other branding elements of Token Flow Insights SA which are
-# not licensed under the Apache 2.0 license. When using or reproducing the code, please remove
-# the trademark and/or other branding elements.
-
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Iterator, TypedDict, Union, Tuple, Optional
+from json import JSONDecodeError
+from typing import Dict, List, Any, Iterator, TypedDict, Union, Tuple
 
 import requests
+
+from ethtx.exceptions import (
+    FourByteConnectionException,
+    FourByteContentException,
+    FourByteException,
+)
 
 log = logging.getLogger(__name__)
 
@@ -57,7 +59,7 @@ class FourByteProvider(SignatureProvider):
     def list_event_signatures(self, filters: Dict = None) -> List[Dict]:
         return self._get_all(endpoint=self.EVENT_ENDPOINT, filters=filters)
 
-    def get_function(self, signature: str) -> Iterator[Optional[SignatureReturnType]]:
+    def get_function(self, signature: str) -> Iterator[SignatureReturnType]:
         if signature == "0x":
             raise ValueError(f"Signature can not be: {signature}")
 
@@ -66,10 +68,9 @@ class FourByteProvider(SignatureProvider):
         )
 
         for function in reversed(data):
-            if parsed := self._parse_text_signature_response(function):
-                yield parsed
+            yield self._parse_text_signature_response(function)
 
-    def get_event(self, signature: str) -> Iterator[Optional[SignatureReturnType]]:
+    def get_event(self, signature: str) -> Iterator[SignatureReturnType]:
         if signature == "0x":
             raise ValueError(f"Signature can not be: {signature}")
 
@@ -78,8 +79,7 @@ class FourByteProvider(SignatureProvider):
         )
 
         for event in reversed(data):
-            if parsed := self._parse_text_signature_response(event):
-                yield parsed
+            yield self._parse_text_signature_response(event)
 
     def url(self, endpoint: str) -> str:
         return f"{self.API_URL}/{endpoint}/"
@@ -109,20 +109,33 @@ class FourByteProvider(SignatureProvider):
             filters["page"] = page
 
         try:
-            response = requests.get(self.url(endpoint), params=filters, timeout=3)
-            return response.json()
+            try:
+                response = requests.get(self.url(endpoint), params=filters, timeout=3)
+                return response.json()
 
-        except requests.exceptions.RequestException as e:
-            log.warning("Could not get data from 4byte.directory: %s", e)
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ) as connection_error:
+                raise FourByteConnectionException(
+                    connection_error
+                ) from connection_error
+
+            except (JSONDecodeError, ValueError) as value_error:
+                log.warning(value_error)
+                raise FourByteContentException(
+                    response.status_code, response.content
+                ) from value_error
+
+        except FourByteException:
             return {}
 
         except Exception as e:
-            log.warning("Unexpected error from 4byte.directory: %s", e)
+            log.critical("Unexpected error from 4byte.directory: %s", e)
             return {}
 
-    def _parse_text_signature_response(
-        self, data: Dict
-    ) -> Optional[SignatureReturnType]:
+    @staticmethod
+    def _parse_text_signature_response(data: Dict) -> SignatureReturnType:
         text_sig = data.get("text_signature", "")
 
         name = text_sig.split("(")[0] if text_sig else ""
@@ -130,19 +143,8 @@ class FourByteProvider(SignatureProvider):
         types = (
             text_sig[text_sig.find("(") + 1 : text_sig.rfind(")")] if text_sig else ""
         )
-
-        if not name and not types:
-            return None
-
         if "(" in types:
             args = tuple(types[types.find("(") + 1 : types.rfind(")")].split(","))
-            if any("(" in arg for arg in args):
-                log.warning(
-                    "Could not parse %s signature: %s",
-                    data.get("hex_signature"),
-                    data.get("text_signature"),
-                )
-                return None
         else:
             args = list(filter(None, types.split(",")))
 

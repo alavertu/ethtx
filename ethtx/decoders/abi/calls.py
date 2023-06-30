@@ -1,19 +1,14 @@
-# Copyright 2021 DAI FOUNDATION (the original version https://github.com/daifoundation/ethtx_ce)
-# Copyright 2021-2022 Token Flow Insights SA (modifications to the original software as recorded
-# in the changelog https://github.com/EthTx/ethtx/blob/master/CHANGELOG.md)
+#  Copyright 2021 DAI Foundation
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-#
-# The product contains trademarks and other branding elements of Token Flow Insights SA which are
-# not licensed under the Apache 2.0 license. When using or reproducing the code, please remove
-# the trademark and/or other branding elements.
-
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 import logging
 from typing import Optional, Dict
 
@@ -24,11 +19,7 @@ from ethtx.semantics.standards.erc20 import ERC20_FUNCTIONS
 from ethtx.semantics.standards.erc721 import ERC721_FUNCTIONS
 from ethtx.utils.measurable import RecursionLimit
 from .abc import ABISubmoduleAbc
-from .helpers.utils import (
-    decode_function_abi_with_external_source,
-    decode_function_abi_with_repository,
-    upsert_guessed_function_semantics,
-)
+from .helpers.utils import decode_function_abi_with_external_source
 from ..decoders.parameters import decode_function_parameters, decode_graffiti_parameters
 
 log = logging.getLogger(__name__)
@@ -71,6 +62,8 @@ class ABICallsDecoder(ABISubmoduleAbc):
                 proxies,
                 chain_id,
             )
+
+        calls_tree = self._prune_delegates(calls_tree)
 
         return calls_tree
 
@@ -148,21 +141,12 @@ class ABICallsDecoder(ABISubmoduleAbc):
             )
 
             if function_name.startswith("0x") and len(function_signature) > 2:
-                repository_functions = [
-                    decode_function_abi_with_repository(
-                        function_signature, self._repository
-                    )
-                ]
-                decoded_functions = (
-                    decode_function_abi_with_external_source(
-                        signature=function_signature
-                    )
-                    if repository_functions[0][1] is None
-                    else repository_functions
+                functions_abi_provider = decode_function_abi_with_external_source(
+                    signature=function_signature, repository=self._repository
                 )
-                for guessed, decoded_function in decoded_functions:
+                for guessed, function_abi_provider in functions_abi_provider:
                     try:
-                        function_abi = decoded_function
+                        function_abi = function_abi_provider
                         function_name = function_abi.name
                         function_input, function_output = decode_function_parameters(
                             call.call_data, call.return_value, function_abi, call.status
@@ -175,10 +159,6 @@ class ABICallsDecoder(ABISubmoduleAbc):
                         continue
                     else:
                         break
-                if repository_functions[0][1] is None and decoded_functions:
-                    upsert_guessed_function_semantics(
-                        function_signature, function_abi, self._repository
-                    )
 
             if (
                 not call.status
@@ -211,7 +191,7 @@ class ABICallsDecoder(ABISubmoduleAbc):
             call_type=call.call_type,
             from_address=AddressInfo(address=call.from_address, name=from_name),
             to_address=AddressInfo(address=call.to_address, name=to_name),
-            value=call.call_value / 10**18,
+            value=call.call_value,
             function_signature=function_signature,
             function_name=function_name,
             arguments=function_input,
@@ -264,5 +244,17 @@ class ABICallsDecoder(ABISubmoduleAbc):
                     proxies,
                     chain_id,
                 )
+
+        return call
+
+    def _prune_delegates(self, call: DecodedCall) -> DecodedCall:
+
+        while len(call.subcalls) == 1 and call.subcalls[0].call_type == "delegatecall":
+            _value = call.value
+            call = call.subcalls[0]
+            call.value = _value
+
+        for i, sub_call in enumerate(call.subcalls):
+            call.subcalls[i] = self._prune_delegates(sub_call)
 
         return call

@@ -1,21 +1,18 @@
-# Copyright 2021 DAI FOUNDATION (the original version https://github.com/daifoundation/ethtx_ce)
-# Copyright 2021-2022 Token Flow Insights SA (modifications to the original software as recorded
-# in the changelog https://github.com/EthTx/ethtx/blob/master/CHANGELOG.md)
+#  Copyright 2021 DAI Foundation
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-#
-# The product contains trademarks and other branding elements of Token Flow Insights SA which are
-# not licensed under the Apache 2.0 license. When using or reproducing the code, please remove
-# the trademark and/or other branding elements.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 import logging
 import os
+from functools import lru_cache
 from typing import List, Dict, Optional
 
 from web3 import Web3
@@ -29,14 +26,13 @@ from ..models.objects_model import Transaction, BlockMetadata, TransactionMetada
 from ..models.semantics_model import FunctionSemantics
 from ..models.w3_model import W3Block, W3Transaction, W3Receipt, W3CallTree, W3Log
 from ..semantics.standards import erc20
-from ..utils.cache_tools import cache
 
 log = logging.getLogger(__name__)
 
 
 def connect_chain(
     http_hook: str = None, ipc_hook: str = None, ws_hook: str = None, poa: bool = False
-) -> Web3:
+) -> Web3 or None:
     if http_hook:
         provider = Web3.HTTPProvider
         hook = http_hook
@@ -132,25 +128,20 @@ class Web3Provider(NodeDataProvider):
         ):
             w3 = connect_chain(http_hook=connection.url, poa=connection.poa)
 
-            try:
-                if w3.is_connected():
-                    log.info(
-                        "Connected to: %s with latest block %s.",
-                        connection,
-                        w3.eth.block_number,
-                    )
-                    return w3
-                else:
-                    log.warning("Connection failed to: %s", connection)
-            except AssertionError:
-                log.warning(
-                    "Node is available, but RPC connection failed: %s", connection
+            if w3.is_connected():
+                log.info(
+                    "Connected to: %s with latest block %s.",
+                    connection,
+                    w3.eth.block_number,
                 )
+                return w3
+            else:
+                log.warning("Connection failed to: %s", connection)
 
         raise NodeConnectionException
 
     # get the raw block data from the node
-    @cache
+    @lru_cache(maxsize=1024)
     def get_block(self, block_number: int, chain_id: Optional[str] = None) -> W3Block:
         chain = self._get_node_connection(chain_id)
         raw_block: BlockData = chain.eth.get_block(block_number)
@@ -180,7 +171,7 @@ class Web3Provider(NodeDataProvider):
         return block
 
     # get the raw transaction data from the node
-    @cache
+    @lru_cache(maxsize=1024)
     def get_transaction(
         self, tx_hash: str, chain_id: Optional[str] = None
     ) -> W3Transaction:
@@ -206,7 +197,7 @@ class Web3Provider(NodeDataProvider):
 
         return transaction
 
-    @cache
+    @lru_cache(maxsize=1024)
     def get_receipt(self, tx_hash: str, chain_id: Optional[str] = None) -> W3Receipt:
         chain = self._get_node_connection(chain_id)
         raw_receipt: TxReceipt = chain.eth.get_transaction_receipt(tx_hash)
@@ -219,7 +210,7 @@ class Web3Provider(NodeDataProvider):
                 address=_log.address,
                 blockHash=_log.blockHash,
                 blockNumber=_log.blockNumber,
-                data=Web3.to_hex(_log.data),
+                data=_log.data.hex(),
                 logIndex=_log.logIndex,
                 removed=_log.removed,
                 topics=_log.topics,
@@ -249,6 +240,11 @@ class Web3Provider(NodeDataProvider):
 
         return receipt
 
+    @staticmethod
+    def _get_custom_calls_tracer():
+        return open(os.path.join(os.path.dirname(__file__), "static/tracer.js")).read()
+
+    @lru_cache(maxsize=1024)
     def get_calls(self, tx_hash: str, chain_id: Optional[str] = None) -> W3CallTree:
         # tracer is a temporary fixed implementation of geth tracer
         chain = self._get_node_connection(chain_id)
@@ -262,16 +258,17 @@ class Web3Provider(NodeDataProvider):
         )
 
     # get the contract bytecode hash from the node
-    @cache
+    @lru_cache(maxsize=1024)
     def get_code_hash(
         self, contract_address: str, chain_id: Optional[str] = None
     ) -> str:
         chain = self._get_node_connection(chain_id)
-        byte_code = chain.eth.get_code(Web3.to_checksum_address(contract_address[-40:]))
+        byte_code = chain.eth.get_code(Web3.to_checksum_address(contract_address))
         code_hash = Web3.keccak(byte_code).hex()
         return code_hash
 
     # get the erc20 token data from the node
+    @lru_cache(maxsize=1024)
     def get_erc20_token(
         self,
         token_address: str,
@@ -279,6 +276,7 @@ class Web3Provider(NodeDataProvider):
         functions: Dict[str, FunctionSemantics],
         chain_id: Optional[str] = None,
     ):
+
         name_abi = symbol_abi = decimals_abi = ""
 
         if functions:
@@ -333,20 +331,19 @@ class Web3Provider(NodeDataProvider):
             if isinstance(symbol, bytes):
                 symbol = symbol.decode("utf-8").replace("\x00", "")
 
-            decimals = token.functions.decimals().call() if decimals_abi else 18
+            decimals = token.functions.decimals().call() if decimals_abi else 0
         except Exception:
             name = symbol = contract_name
-            decimals = 18
+            decimals = 0
 
         return dict(address=token_address, symbol=symbol, name=name, decimals=decimals)
 
     # guess if the contract is and erc20 token and get the data
+    @lru_cache(maxsize=1024)
     def guess_erc20_token(self, contract_address, chain_id: Optional[str] = None):
         chain = self._get_node_connection(chain_id)
 
-        byte_code = chain.eth.get_code(
-            Web3.to_checksum_address(contract_address[-40:])
-        ).hex()
+        byte_code = chain.eth.get_code(Web3.to_checksum_address(contract_address)).hex()
 
         if all(
             "63" + signature[2:] in byte_code
@@ -362,6 +359,7 @@ class Web3Provider(NodeDataProvider):
                 erc20.erc20_approval_event.signature,
             )
         ):
+
             name_abi = (
                 '{"name":"name", "constant":true, "payable":false,'
                 ' "type":"function", "inputs":[], "outputs":[{"name":"","type":"string"}]}'
@@ -398,7 +396,7 @@ class Web3Provider(NodeDataProvider):
         return None
 
     # guess if the contract is and erc20 token proxy and get the data
-    @cache
+    @lru_cache(maxsize=1024)
     def guess_erc20_proxy(self, contract_address, chain_id: Optional[str] = None):
         chain = self._get_node_connection(chain_id)
 
@@ -433,7 +431,7 @@ class Web3Provider(NodeDataProvider):
         return None
 
     # guess if the contract is and erc721 token proxy and get the data
-    @cache
+    @lru_cache(maxsize=1024)
     def guess_erc721_proxy(self, contract_address, chain_id: Optional[str] = None):
         chain = self._get_node_connection(chain_id)
 
@@ -462,8 +460,9 @@ class Web3Provider(NodeDataProvider):
 
         return None
 
-    @cache
+    @lru_cache(maxsize=1024)
     def get_full_transaction(self, tx_hash: str, chain_id: Optional[str] = None):
+
         w3transaction = self.get_transaction(tx_hash, chain_id)
         w3receipt = self.get_receipt(tx_hash, chain_id)
         w3calltree = self.get_calls(tx_hash, chain_id)
@@ -472,11 +471,9 @@ class Web3Provider(NodeDataProvider):
             w3transaction=w3transaction, w3receipt=w3receipt, w3calltree=w3calltree
         )
 
-    def _get_custom_calls_tracer(self):
-        return open(os.path.join(os.path.dirname(__file__), "static/tracer.js")).read()
-
+    @staticmethod
     def _create_call_from_debug_trace_tx(
-        self, tx_hash: str, chain_id: str, input_rpc: AttributeDict
+        tx_hash: str, chain_id: str, input_rpc: AttributeDict
     ) -> W3CallTree:
         def prep_raw_dict(dct: [AttributeDict, Dict]):
             if not isinstance(dct, dict):
@@ -508,6 +505,7 @@ class Web3Provider(NodeDataProvider):
             new_call_tree = []
 
             for pair in tmp_call_tree:
+
                 parent_call: W3CallTree = pair["parent"]
                 child_calls: List = pair["children"]
 

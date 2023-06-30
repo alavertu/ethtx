@@ -1,25 +1,18 @@
-# Copyright 2021 DAI FOUNDATION (the original version https://github.com/daifoundation/ethtx_ce)
-# Copyright 2021-2022 Token Flow Insights SA (modifications to the original software as recorded
-# in the changelog https://github.com/EthTx/ethtx/blob/master/CHANGELOG.md)
+#  Copyright 2021 DAI Foundation
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-#
-# The product contains trademarks and other branding elements of Token Flow Insights SA which are
-# not licensed under the Apache 2.0 license. When using or reproducing the code, please remove
-# the trademark and/or other branding elements.
-
-from __future__ import annotations
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 from typing import List, Dict, Optional, TYPE_CHECKING
 
 from ethtx.models.base_model import BaseModel
-
 if TYPE_CHECKING:
     from ethtx.providers.semantic_providers import ISemanticsDatabase
 
@@ -33,12 +26,9 @@ class TransformationSemantics(BaseModel):
 class ParameterSemantics(BaseModel):
     parameter_name: str
     parameter_type: str
-    components: list[ParameterSemantics] = []
+    components: list = []
     indexed: bool = False
     dynamic: bool = False
-
-
-ParameterSemantics.update_forward_refs()
 
 
 class EventSemantics(BaseModel):
@@ -95,10 +85,10 @@ class AddressSemantics(BaseModel):
     class Config:
         allow_mutation = True
 
+
     @staticmethod
-    def from_mongo_record(
-        raw_address_semantics: Dict, database: "ISemanticsDatabase"
-    ) -> "AddressSemantics":
+    def from_mongo_record(raw_address_semantics: Dict, database: 'ISemanticsDatabase') -> 'AddressSemantics':
+
         ZERO_HASH = "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
 
         def decode_parameter(_parameter):
@@ -132,12 +122,14 @@ class AddressSemantics(BaseModel):
             )
 
         else:
+
             raw_contract_semantics = database.get_contract_semantics(
                 raw_address_semantics["contract"]
             )
             events = {}
 
             for signature, event in raw_contract_semantics["events"].items():
+
                 parameters_semantics = []
                 for parameter in event["parameters"]:
                     parameters_semantics.append(decode_parameter(parameter))
@@ -151,6 +143,7 @@ class AddressSemantics(BaseModel):
 
             functions = {}
             for signature, function in raw_contract_semantics["functions"].items():
+
                 inputs_semantics = []
                 for parameter in function["inputs"]:
                     inputs_semantics.append(decode_parameter(parameter))
@@ -188,6 +181,7 @@ class AddressSemantics(BaseModel):
         address = raw_address_semantics.get("address")
         chain_id = raw_address_semantics.get("chain_id")
         name = raw_address_semantics.get("name", address)
+
 
         address_semantics = AddressSemantics(
             chain_id=chain_id,

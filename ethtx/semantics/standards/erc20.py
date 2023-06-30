@@ -1,18 +1,14 @@
-# Copyright 2021 DAI FOUNDATION (the original version https://github.com/daifoundation/ethtx_ce)
-# Copyright 2021-2022 Token Flow Insights SA (modifications to the original software as recorded
-# in the changelog https://github.com/EthTx/ethtx/blob/master/CHANGELOG.md)
+#  Copyright 2021 DAI Foundation
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-#
-# The product contains trademarks and other branding elements of Token Flow Insights SA which are
-# not licensed under the Apache 2.0 license. When using or reproducing the code, please remove
-# the trademark and/or other branding elements.
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
 
 from ethtx.models.semantics_model import (
     EventSemantics,
@@ -40,7 +36,7 @@ erc20_transfer_event = EventSemantics(
 
 erc20_transfer_event_transformation = {
     "__input2__": TransformationSemantics(
-        transformation="__input2__ / 10**token_decimals(__contract__)"
+        transformation="__input2__"
     )
 }
 
@@ -63,7 +59,7 @@ erc20_approval_event = EventSemantics(
 
 erc20_approval_event_transformation = {
     "__input2__": TransformationSemantics(
-        transformation="__input2__ / 10**token_decimals(__contract__)"
+        transformation="__input2__"
     )
 }
 
@@ -79,7 +75,7 @@ erc20_transfer_function = FunctionSemantics(
 
 erc20_transfer_function_transformation = {
     "__input1__": TransformationSemantics(
-        transformation="__input1__ / 10**token_decimals(__contract__)"
+        transformation="__input1__"
     )
 }
 
@@ -96,7 +92,7 @@ erc20_transferFrom_function = FunctionSemantics(
 
 erc20_transferFrom_function_transformation = {
     "__input2__": TransformationSemantics(
-        transformation="__input2__ / 10**token_decimals(__contract__)"
+        transformation="__input2__"
     )
 }
 
@@ -112,7 +108,7 @@ erc20_approve_function = FunctionSemantics(
 
 erc20_approve_function_transformation = {
     "__input1__": TransformationSemantics(
-        transformation="__input1__ / 10**token_decimals(__contract__)"
+        transformation="__input1__"
     )
 }
 
@@ -125,7 +121,7 @@ erc20_balanceOf_function = FunctionSemantics(
 
 erc20_balanceOf_function_transformation = {
     "__output0__": TransformationSemantics(
-        transformation="__output0__ / 10**token_decimals(__contract__)"
+        transformation="__output0__"
     )
 }
 
@@ -138,7 +134,7 @@ erc20_totalSupply_function = FunctionSemantics(
 
 erc20_totalSupply_function_transformation = {
     "__output0__": TransformationSemantics(
-        transformation="__output0__ / 10**token_decimals(__contract__)"
+        transformation="__output0__"
     )
 }
 

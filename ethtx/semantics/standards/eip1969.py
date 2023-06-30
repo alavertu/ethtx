@@ -1,25 +1,9 @@
-# Copyright 2021 DAI FOUNDATION (the original version https://github.com/daifoundation/ethtx_ce)
-# Copyright 2021-2022 Token Flow Insights SA (modifications to the original software as recorded
-# in the changelog https://github.com/EthTx/ethtx/blob/master/CHANGELOG.md)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at: http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and limitations under the License.
-#
-# The product contains trademarks and other branding elements of Token Flow Insights SA which are
-# not licensed under the Apache 2.0 license. When using or reproducing the code, please remove
-# the trademark and/or other branding elements.
+from functools import lru_cache
 
 from web3 import Web3
 
-from ethtx.utils.cache_tools import cache
 
-
-@cache
+@lru_cache(maxsize=1024)
 def is_eip1969_proxy(chain, delegator, delegate):
     implementation_slot = hex(
         int(Web3.keccak(text="eip1967.proxy.implementation").hex(), 16) - 1
@@ -36,7 +20,7 @@ def is_eip1969_proxy(chain, delegator, delegate):
         return False
 
 
-@cache
+@lru_cache(maxsize=1024)
 def is_eip1969_beacon_proxy(chain, delegator, delegate):
     ibeacon_abi = """[
                         {
